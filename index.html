@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Greeks Risk Quiz</title>
+<style>
+:root{
+  --bg:#000000;--panel:#0b0c0e;--panel2:#16181c;--line:#2a2d33;--text:#e8eaed;--muted:#8f96a0;
+  --accent:#4aa3ff;--accent2:#2f86e0;--green:#3fb950;--red:#f85149;--amber:#f0a030;
+  --longbg:rgba(63,185,80,.20);--shortbg:rgba(248,81,73,.20);--atm:rgba(74,163,255,.10);
+  --mono:ui-monospace,"Cascadia Mono","Consolas","SF Mono",Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:8px 14px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover{background:var(--accent2)}
+button:disabled{opacity:.5;cursor:default}
+input[type=text],select{font:inherit;font-family:var(--mono);background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+input[type=text]{width:140px}
+table.qt input[type=text]{width:100%;min-width:0;padding:5px 6px}
+table.gt td.lab{font-family:var(--mono);font-weight:700;white-space:nowrap}
+input[type=text]:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.pos{color:var(--green)} .neg{color:var(--red)}
+
+/* top bar */
+#topbar{position:sticky;top:0;z-index:5;height:48px;background:var(--panel);border-bottom:1px solid var(--line);padding:0 18px;display:flex;flex-wrap:wrap;gap:8px 26px;align-items:center}
+#topbar .brand{font-weight:700;letter-spacing:.3px}
+#topbar .fut{display:flex;align-items:baseline;gap:10px}
+#topbar .fut .px{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent)}
+#topbar .chip{font-family:var(--mono);font-size:12.5px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:3px 8px}
+#topbar .score{margin-left:auto;font-family:var(--mono)}
+#topbar button.fs{padding:5px 12px;font-size:13px}
+
+main{padding:12px 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:16px}
+.card h2{margin:0 0 10px;font-size:17px}
+.card h3{margin:14px 0 6px;font-size:14px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.quiz{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:1000px){
+  .quiz{height:calc(100vh - 48px - 24px)}
+  .quiz.one{grid-template-columns:50% minmax(0,1fr)}
+  .quiz.two{grid-template-rows:70% minmax(0,1fr)}
+  .quiz .pane{overflow-y:auto;min-height:0}
+  .quiz .pane .card:last-child{margin-bottom:0}
+  .quiz.two #qcol .card{margin-bottom:14px}
+  .boards.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
+#futbar{margin-bottom:10px}
+.futrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 20px;font-family:var(--mono);font-size:15px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.futrow .fname{font-weight:700;color:var(--accent)}
+.futrow b{font-size:18px}
+.bid{color:#6cb6ff}.ask{color:#ff9b8f}
+table.board td.theo{color:var(--text);font-weight:600}
+table.board td.bid,table.board td.ask{color:var(--muted)}
+table.board .gsep{border-left:1px solid var(--line)}
+.gk{font-family:"Cambria","Times New Roman",serif;font-style:italic;font-size:1.15em;line-height:1}
+.boardnote{font-size:12px;color:var(--muted);margin-top:8px}
+
+/* setup */
+.setup{max-width:760px;margin:30px auto}
+.setup h1{margin:0 0 6px;font-size:24px}
+.row{display:flex;align-items:center;gap:12px;margin:14px 0;flex-wrap:wrap}
+.row label{min-width:190px;font-weight:600}
+input[type=range]{width:260px;accent-color:var(--accent)}
+.big{font-family:var(--mono);font-size:18px;font-weight:700;min-width:30px}
+
+/* board */
+.boardwrap{overflow:hidden}
+table.board{border-collapse:collapse;width:100%;table-layout:fixed;font-family:var(--mono);font-size:clamp(9.5px,0.78vw,12.5px);white-space:nowrap}
+table.board th,table.board td{padding:3px 3px;text-align:right;border-bottom:1px solid var(--line);overflow:hidden;text-overflow:clip}
+table.board thead th{color:var(--muted);font-weight:600}
+table.board th.side{text-align:center;color:var(--text);font-size:12px;letter-spacing:1px}
+table.board td.k{text-align:center;font-weight:700;background:var(--panel2);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+table.board tr.atm td{background:var(--atm)}
+table.board tr.atm td.k{color:var(--accent)}
+td.pq{font-weight:700;text-align:center!important}
+td.pq.long{background:var(--longbg);color:var(--green)}
+td.pq.short{background:var(--shortbg);color:var(--red)}
+.exphead{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;margin:6px 0 6px}
+.exphead b{font-size:14px}
+.legs{font-family:var(--mono);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:6px}
+.leg{border:1px solid var(--line);border-radius:5px;padding:2px 8px;background:var(--panel2)}
+.leg.long{border-color:var(--green)} .leg.short{border-color:var(--red)}
+.hedge{margin-top:10px;font-family:var(--mono)}
+details{margin-top:4px}
+details summary{cursor:pointer;font-weight:600}
+.conv{font-size:13px}
+.conv code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:4px}
+.conv li{margin:4px 0}
+
+/* question */
+.qmeta{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+.tag{border:1px solid var(--line);border-radius:999px;padding:1px 9px;font-size:11.5px;color:var(--text);background:var(--panel2)}
+.prompt p{margin:6px 0}
+table.qt{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+table.qt th,table.qt td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+table.qt th{color:var(--muted);font-weight:600;font-size:12px}
+table.qt td.n,table.qt th.n{text-align:right;font-family:var(--mono)}
+.inrow{display:grid;grid-template-columns:minmax(170px,auto) auto;gap:8px 14px;align-items:center;margin:10px 0}
+.err{color:var(--red);min-height:18px;margin:6px 0;font-size:13px}
+.tf{display:flex;gap:12px;margin:12px 0}
+.tf button{min-width:110px;font-weight:600}
+.feedback{margin-top:12px;border-top:1px dashed var(--line);padding-top:12px}
+.pts{font-family:var(--mono);font-weight:700}
+.p3{color:var(--green)} .p2{color:#8fd67f} .p1{color:var(--amber)} .p0{color:var(--red)}
+.verdict{font-size:15px;font-weight:700;margin-bottom:6px}
+.ex{font-size:13px}
+.ex p{margin:6px 0}
+.chart{margin:8px 0}
+.chart text{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+.statement{font-size:15px;font-weight:600;background:var(--panel2);border-left:3px solid var(--accent);padding:10px 12px;border-radius:4px;margin:10px 0}
+.results td,.results th{padding:6px 10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 8px;font-size:12.5px;margin:4px 0 6px}
+.legend button.lg{padding:4px 10px;font-size:12.5px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;opacity:.55}
+.legend button.lg.on{color:var(--text);border-color:var(--muted);opacity:1}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:7px;border-radius:2px}
+.bigscore{font-size:40px;font-weight:800;font-family:var(--mono)}
+.actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+@media (max-width:600px){main{padding:12px}.row label{min-width:0}input[type=text]{width:110px}}
+</style>
+</head>
+<body>
+<div id="topbar"><span class="brand">Greeks Risk Quiz</span></div>
+<main id="app"></main>
+
+<script>
+"use strict";
+/* ================= utilities ================= */
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rint=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=arr=>{const a=arr.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+const rd=x=>+(+x).toFixed(8);
+const decs=x=>{const s=String(rd(x));return s.includes('.')?s.split('.')[1].length:0;};
+function erf(x){const s=Math.sign(x);x=Math.abs(x);const t=1/(1+0.3275911*x);
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return s*y;}
+const Ncdf=x=>0.5*(1+erf(x/Math.SQRT2));
+const npdf=x=>Math.exp(-0.5*x*x)/Math.sqrt(2*Math.PI);
+const NICE=[0.01,0.02,0.05,0.1,0.2,0.25,0.5,1,2,2.5,5,10,20,25,50,100,200,250,500,1000];
+// any-magnitude round step (1, 2, 2.5, 5 × 10^n)
+const niceStep=x=>{const e=10**Math.floor(Math.log10(x));return e*[1,2,2.5,5,10].find(m=>m*e>=x);};
+const nearestNice=x=>NICE.reduce((b,n)=>Math.abs(Math.log(n/x))<Math.abs(Math.log(b/x))?n:b,NICE[0]);
+function fmtSig(x,s=3){if(!isFinite(x))return'–';if(x===0)return'0';const d=Math.max(0,s-1-Math.floor(Math.log10(Math.abs(x))));return x.toFixed(Math.min(d,8));}
+function fmtMoney(x,signed=false){const a=Math.abs(x);const d=a>=100?0:2;
+  const s=a.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return (x<0?'−$':(signed&&x>0?'+$':'$'))+s;}
+const fmtMoneySig=x=>(x<0?"−$":"$")+fmtSig(Math.abs(x),3);
+function fmtNum(x,d=2){return (x<0?'−':'')+Math.abs(x).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function fmtPx(x){return x.toLocaleString('en-US',{minimumFractionDigits:M.pdec,maximumFractionDigits:M.pdec});}
+function fmtK(k){return k.toLocaleString('en-US',{minimumFractionDigits:M.kdec,maximumFractionDigits:M.kdec});}
+function fmtMove(F1){const d=F1-M.F;return `${d>=0?'+':'−'}${fmtPx(Math.abs(d))} (${d>=0?'+':'−'}${Math.abs(d/M.F*100).toFixed(2)}%)`;}
+function parseNum(s){if(s==null)return NaN;s=String(s).trim().replace(/[−–]/g,'-').replace(/[$,\s]/g,'');
+  if(!s)return NaN;let neg=false;if(/^\(.*\)$/.test(s)){neg=true;s=s.slice(1,-1);}
+  let m=1;const l=s.slice(-1).toLowerCase();if(l==='k'){m=1e3;s=s.slice(0,-1);}else if(l==='m'){m=1e6;s=s.slice(0,-1);}
+  if(!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(s))return NaN;const v=Number(s);return (neg?-v:v)*m;}
+function scoreNum(u,c,floor=0){const den=Math.max(Math.abs(c),floor,1e-12);const e=Math.abs(u-c)/den;
+  return {pts:e<=0.1?3:e<=0.2?2:e<=0.3?1:0,err:e};}
+const ptsSpan=(p,m)=>`<span class="pts p${m===3?p:(p===m?3:p===0?0:1)}">${p}/${m}</span>`;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ================= Black-76 ================= */
+function black(F,K,T,vol,type){
+  if(T<=1e-9||vol<=1e-6){const intr=type==='C'?Math.max(F-K,0):Math.max(K-F,0);
+    const d=type==='C'?(F>K?1:0):(F<K?-1:0);return{price:intr,delta:d,gamma:0,vega:0,theta:0};}
+  const sq=Math.sqrt(T),d1=(Math.log(F/K)+0.5*vol*vol*T)/(vol*sq),d2=d1-vol*sq;
+  return{
+    price:type==='C'?F*Ncdf(d1)-K*Ncdf(d2):K*Ncdf(-d2)-F*Ncdf(-d1),
+    delta:type==='C'?Ncdf(d1):Ncdf(d1)-1,
+    gamma:npdf(d1)/(F*vol*sq),
+    vega:F*npdf(d1)*sq/100,            // per 1 vol point
+    theta:-F*npdf(d1)*vol/(2*sq)/365   // per calendar day
+  };
+}
+
+/* ================= market & position ================= */
+let M=null,P=null,S=null,P0=null,C0=null,G0=null;
+const SET={n:10,two:false,tmpl:'random'};
+// Multiplier = units of underlying delivered per future (and per option, which exercises into one future)
+const BANDS=[{lo:52,hi:246,mult:[10,50,100,250,500,1000]}];
+const NSTRIKES=15,MID=7;
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dateLbl=d=>`${String(d.getDate()).padStart(2,'0')}-${MON[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
+function addDays(n){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+n);return d;}
+
+function genMarket(two){
+  const band=pick(BANDS);
+  const F=10*rint(Math.ceil(band.lo/10),Math.floor(band.hi/10));   // futures always a multiple of 10 (and a strike)
+  const vol=Math.round(rnd(12,60)*10)/1000;
+  const d1=rint(7,120);
+  const SP=[1,2,2.5,5,10],target=F*vol*Math.sqrt(d1/365)*0.3;
+  let spacing=SP.reduce((b,n)=>Math.abs(Math.log(n/target))<Math.abs(Math.log(b/target))?n:b,SP[0]);
+  // outer strikes no more than 40% from the ATM strike
+  while(MID*spacing>0.4*F){const i=SP.indexOf(spacing);if(i<=0)break;spacing=SP[i-1];}
+  const lvlTick=nearestNice(spacing/4);
+  const strikes=[...Array(NSTRIKES)].map((_,i)=>rd(F+(i-MID)*spacing));
+  const exps=[{days:d1,T:d1/365,vol,date:addDays(d1)}];
+  if(two){const d2=d1+rint(21,150);const v2=Math.min(0.8,Math.max(0.08,Math.round((vol+rnd(-0.05,0.05))*1000)/1000));
+    exps.push({days:d2,T:d2/365,vol:v2,date:addDays(d2)});}
+  // option markets: theo ± ~0.4 vol points of vega, at least 0.02 each side, on a 0.01 tick
+  const quotes=exps.map(ex=>strikes.map(K=>{const q={};for(const t of ['C','P']){const g=black(F,K,ex.T,ex.vol,t);const hs=Math.max(0.02,0.4*g.vega);
+    const theo=Math.round(g.price*100)/100;   // theo is quoted (and used for edge) to 2 dp, like the board
+    q[t]={theo,bid:Math.max(0,Math.floor((theo-hs)*100+1e-9)/100),ask:Math.ceil((theo+hs)*100-1e-9)/100};}return q;}));
+  const fd=addDays(exps[exps.length-1].days+rint(5,25));
+  return{F,spacing,lvlTick,strikes,exps,quotes,two,mult:pick(band.mult),fhs:pick([0.02,0.05,0.05,0.1]),
+    kdec:decs(spacing),pdec:Math.max(decs(lvlTick),decs(spacing)),
+    futName:`FUT ${MON[fd.getMonth()]}-${String(fd.getFullYear()).slice(2)}`};
+}
+
+const L=(t,k,q,e=0)=>({type:t,k,q,exp:e});
+const TEMPLATES=[
+  {name:'Call',b:()=>[L('C',rint(1,5),1)]},
+  {name:'Put',b:()=>[L('P',rint(1,5),1)]},
+  {name:'Straddle',b:()=>{const k=rint(2,4);return[L('C',k,1),L('P',k,1)];}},
+  {name:'Strangle',b:()=>{const w=rint(1,2);return[L('P',3-w,1),L('C',3+w,1)];}},
+  {name:'Strap (2 calls : 1 put)',b:()=>{const k=rint(2,4);return[L('C',k,2),L('P',k,1)];}},
+  {name:'Strip (1 call : 2 puts)',b:()=>{const k=rint(2,4);return[L('C',k,1),L('P',k,2)];}},
+  {name:'Call spread',b:()=>{const a=rint(1,4),w=rint(1,2);return[L('C',a,1),L('C',a+w,-1)];}},
+  {name:'Put spread',b:()=>{const a=rint(2,5),w=rint(1,2);return[L('P',a,1),L('P',a-w,-1)];}},
+  {name:'1x2 call ratio spread',b:()=>{const a=rint(1,4),w=rint(1,2);return[L('C',a,1),L('C',a+w,-2)];}},
+  {name:'1x2 put ratio spread',b:()=>{const a=rint(2,5),w=rint(1,2);return[L('P',a,1),L('P',a-w,-2)];}},
+  {name:'Call butterfly',b:()=>{const w=rint(1,2),c=rint(w,6-w);return[L('C',c-w,1),L('C',c,-2),L('C',c+w,1)];}},
+  {name:'Put butterfly',b:()=>{const w=rint(1,2),c=rint(w,6-w);return[L('P',c-w,1),L('P',c,-2),L('P',c+w,1)];}},
+  {name:'Iron butterfly (long wings)',b:()=>{const w=rint(1,3);return[L('P',3-w,1),L('P',3,-1),L('C',3,-1),L('C',3+w,1)];}},
+  {name:'Broken-wing call butterfly',b:()=>{const a=rint(0,3);return[L('C',a,1),L('C',a+1,-2),L('C',a+3,1)];}},
+  {name:'Broken-wing put butterfly',b:()=>{const a=rint(3,6);return[L('P',a,1),L('P',a-1,-2),L('P',a-3,1)];}},
+  {name:'Call condor',b:()=>{const a=rint(0,3);return[L('C',a,1),L('C',a+1,-1),L('C',a+2,-1),L('C',a+3,1)];}},
+  {name:'Put condor',b:()=>{const a=rint(0,3);return[L('P',a,1),L('P',a+1,-1),L('P',a+2,-1),L('P',a+3,1)];}},
+  {name:'Iron condor (long wings)',b:()=>{const w=rint(1,2);return[L('P',2-w,1),L('P',2,-1),L('C',4,-1),L('C',4+w,1)];}},
+  {name:'Risk reversal (long call / short put)',b:()=>{const w=rint(1,2);return[L('P',3-w,-1),L('C',3+w,1)];}},
+  {name:'Call ladder (1x1x1)',b:()=>{const a=rint(0,4);return[L('C',a,1),L('C',a+1,-1),L('C',a+2,-1)];}},
+  {name:'Put ladder (1x1x1)',b:()=>{const a=rint(2,6);return[L('P',a,1),L('P',a-1,-1),L('P',a-2,-1)];}},
+  {name:'Call Christmas tree',b:()=>{const a=rint(0,3);return[L('C',a,1),L('C',a+2,-1),L('C',a+3,-1)];}},
+  {name:'Put Christmas tree',b:()=>{const a=rint(3,6);return[L('P',a,1),L('P',a-2,-1),L('P',a-3,-1)];}},
+  {name:'Seagull (short put, call spread)',b:()=>[L('P',rint(0,1),-1),L('C',3,1),L('C',5,-1)]},
+  {name:'Bespoke spread',bespoke:true,b:()=>bespoke(false)},
+  {name:'Call calendar',cal:true,b:()=>{const k=rint(2,4);return[L('C',k,-1,0),L('C',k,1,1)];}},
+  {name:'Put calendar',cal:true,b:()=>{const k=rint(2,4);return[L('P',k,-1,0),L('P',k,1,1)];}},
+  {name:'Straddle calendar',cal:true,b:()=>{const k=rint(2,4);return[L('C',k,-1,0),L('P',k,-1,0),L('C',k,1,1),L('P',k,1,1)];}},
+  {name:'Call diagonal',cal:true,b:()=>{const k=rint(2,4);return[L('C',k+1,-1,0),L('C',k,1,1)];}},
+  {name:'Put diagonal',cal:true,b:()=>{const k=rint(2,4);return[L('P',k-1,-1,0),L('P',k,1,1)];}},
+  {name:'Double calendar',cal:true,b:()=>[L('P',2,-1,0),L('P',2,1,1),L('C',4,-1,0),L('C',4,1,1)]},
+  {name:'1x2 calendar (sell 2 front, buy 1 back)',cal:true,b:()=>{const k=rint(2,4),t=pick(['C','P']);return[L(t,k,-2,0),L(t,k,1,1)];}},
+  {name:'Front strangle vs back straddle',cal:true,b:()=>[L('P',2,-1,0),L('C',4,-1,0),L('C',3,1,1),L('P',3,1,1)]},
+  {name:'Front butterfly vs back straddle',cal:true,b:()=>[L('C',2,2,0),L('C',3,-4,0),L('C',4,2,0),L('C',3,-1,1),L('P',3,-1,1)]},
+  {name:'Bespoke calendar spread',cal:true,bespoke:true,b:()=>bespoke(true)},
+];
+function bespoke(two){
+  for(;;){const n=rint(2,4),seen=new Set(),legs=[];
+    while(legs.length<n){const l=L(pick(['C','P']),rint(0,6),pick([-3,-2,-1,1,2,3]),two?rint(0,1):0);
+      const key=l.exp+l.type+l.k;if(seen.has(key))continue;seen.add(key);legs.push(l);}
+    if(two&&!(legs.some(l=>l.exp===0)&&legs.some(l=>l.exp===1)))continue;
+    return legs;}
+}
+function mergeLegs(legs){const m=new Map();for(const l of legs){const k=l.exp+l.type+l.k;
+  if(m.has(k))m.get(k).q+=l.q;else m.set(k,{...l});}
+  return [...m.values()].filter(l=>l.q!==0).sort((a,b)=>a.exp-b.exp||a.k-b.k||(a.type<b.type?-1:1));}
+function genPosition(two,choice){
+  let t;
+  if(choice!=='random')t=TEMPLATES.find(x=>x.name===choice);
+  if(!t||(t.cal&&!two))t=(two&&Math.random()<0.55)?pick(TEMPLATES.filter(x=>x.cal)):pick(TEMPLATES.filter(x=>!x.cal));
+  let legs=t.b();
+  let expNote='';
+  if(!t.cal&&two&&Math.random()<0.3&&!t.bespoke){legs=legs.map(l=>({...l,exp:1}));}
+  const dir=t.bespoke?1:(Math.random()<0.5?1:-1);
+  const lots=t.bespoke?pick([5,10,20,25]):pick([5,10,20,25,50,100]);
+  // templates are written on strikes 0..6 around a centre of 3; place them around the middle of the 15-strike board
+  const off=MID-3+rint(-2,2);
+  legs=mergeLegs(legs).map(l=>({...l,k:l.k+off,q:l.q*dir*lots}));
+  const name=t.bespoke?`${t.name} (×${lots})`:`${dir>0?'Long':'Short'} ${lots}× ${t.name}`;
+  return{name,legs};
+}
+
+/* ================= portfolio engine ================= */
+function legG(l,F,dt=0,dv=[0,0]){const e=M.exps[l.exp];return black(F,M.strikes[l.k],e.T-dt,e.vol+(dv[l.exp]||0)/100,l.type);}
+function port(F,dt=0,dv=[0,0]){
+  const r={value:0,delta:0,gamma:0,vega:0,theta:0,vegaE:[0,0],gammaE:[0,0]};
+  for(const l of P.legs){const g=legG(l,F,dt,dv);
+    r.value+=l.q*g.price;r.delta+=l.q*g.delta;r.gamma+=l.q*g.gamma;r.vega+=l.q*g.vega;r.theta+=l.q*g.theta;
+    r.vegaE[l.exp]+=l.q*g.vega;r.gammaE[l.exp]+=l.q*g.gamma;}
+  return r;
+}
+const cashOf=(p,F)=>({cd:p.delta*M.mult*F,cg:p.gamma*M.mult*F*F/100,cv:p.vega*M.mult,ct:p.theta*M.mult});
+// PnL of options + futures hedge (set at F0, not re-hedged) for a jump to F1 after dt years with vol shift dv
+function pnlJump(F1,dt=0,dv=[0,0]){return M.mult*((port(F1,dt,dv).value-P0.value)-P0.delta*(F1-M.F));}
+// Monotone path in n steps, re-hedging after every step; time and vol change accrue evenly along the path
+function pnlPath(F1,n,dt=0,dv=[0,0]){
+  n=Math.max(1,n);let F=M.F,h=-P0.delta,prev=P0.value,pnl=0;
+  for(let i=1;i<=n;i++){const Fn=M.F+(F1-M.F)*i/n,p=port(Fn,dt*i/n,dv.map(x=>x*i/n));
+    pnl+=(p.value-prev)+h*(Fn-F);prev=p.value;F=Fn;h=-p.delta;}
+  return pnl*M.mult;
+}
+function approxPnl(F1,dt=0,dv=[0,0],H=null){
+  const dF=F1-M.F,g=P0.gamma*M.mult;
+  const gp=H?0.5*g*H*Math.abs(dF):0.5*g*dF*dF;
+  return gp+P0.theta*M.mult*dt*365+M.mult*(P0.vegaE[0]*(dv[0]||0)+P0.vegaE[1]*(dv[1]||0));
+}
+function levelAt(off){const t=M.lvlTick;return rd(Math.round((M.F+off*M.spacing)/t)*t);}
+// Moves are kept modest (≤ 2 strikes, shrunk further if needed) so today's Greeks give a good PnL estimate
+function randLevels(k,offs=[-2,-1.5,-1,-0.75,-0.5,0.5,0.75,1,1.5,2],scale=1){
+  const out=[];for(const o of shuffle(offs)){const x=levelAt(o*scale);
+    if(x<=0||Math.abs(x-M.F)<M.lvlTick*0.99||out.includes(x))continue;out.push(x);if(out.length===k)break;}
+  return out.length===k?out:null;
+}
+const expLbl=e=>`Exp ${e+1} (${dateLbl(M.exps[e].date)})`;
+const dvLbl=dv=>M.two?`Exp1 ${dv[0]>=0?'+':''}${fmtNum(dv[0],1)} / Exp2 ${dv[1]>=0?'+':''}${fmtNum(dv[1],1)}`:`${dv[0]>=0?'+':''}${fmtNum(dv[0],1)} vol pts`;
+
+/* ================= skew ================= */
+function genSkew(){
+  const neg=Math.random()<0.72;
+  const s=Math.round((neg?-rnd(0.6,2.2):rnd(0.4,1.6))*100)/100; // vol pts per strike spacing
+  const c=Math.round(rnd(0.05,0.35)*100)/100;
+  const v0=M.exps[0].vol*100;
+  return{s,c,v0,vol:F=>{const x=(F-M.F)/M.spacing;return Math.max(3,v0+s*x+c*x*x);}};
+}
+function skewSVG(sk,sc){
+  const W=540,H=240,ml=46,mr=14,mt=14,mb=34;
+  const x0=M.strikes[MID-4],x1=M.strikes[MID+4];
+  const pts=[];for(let i=0;i<=80;i++){const F=x0+(x1-x0)*i/80;pts.push([F,sk.vol(F)]);}
+  let y0=Math.min(...pts.map(p=>p[1])),y1=Math.max(...pts.map(p=>p[1]));
+  const pad=Math.max(1,(y1-y0)*0.12);y0-=pad;y1+=pad;
+  const X=F=>ml+(F-x0)/(x1-x0)*(W-ml-mr),Y=v=>mt+(1-(v-y0)/(y1-y0))*(H-mt-mb);
+  let g='';
+  const step=nearestNice((y1-y0)/5);
+  for(let v=Math.ceil(y0/step)*step;v<=y1;v+=step){g+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${ml-6}" y="${Y(v)+4}" text-anchor="end">${fmtNum(v,step<1?1:0)}%</text>`;}
+  for(const k of M.strikes.filter(k=>k>=x0&&k<=x1)){g+=`<line x1="${X(k)}" x2="${X(k)}" y1="${mt}" y2="${H-mb}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${X(k)}" y="${H-mb+15}" text-anchor="middle">${fmtK(k)}</text>`;}
+  g+=`<text x="${(ml+W-mr)/2}" y="${H-3}" text-anchor="middle">Futures level (ATM implied vol on y-axis)</text>`;
+  g+=`<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="${pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ')}"/>`;
+  g+=`<line x1="${X(M.F)}" x2="${X(M.F)}" y1="${mt}" y2="${H-mb}" stroke="var(--text)" stroke-width="1.2"/><circle cx="${X(M.F)}" cy="${Y(sk.v0)}" r="4.5" fill="var(--text)"/><text x="${X(M.F)+6}" y="${mt+11}" style="fill:var(--text)">now</text>`;
+  for(const s of sc){g+=`<circle cx="${X(s.F1)}" cy="${Y(sk.vol(s.F1))}" r="5" fill="var(--amber)"/><text x="${X(s.F1)}" y="${Y(sk.vol(s.F1))-9}" text-anchor="middle" style="fill:var(--amber);font-weight:700">${s.label}</text>`;}
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img" aria-label="Volatility skew curve">${g}</svg>`;
+}
+
+/* ================= questions ================= */
+const MODE_TEXT={
+  instant:{title:'Scenario PnL — instantaneous',tag:'Gamma PnL',
+    d:()=>`<p>Each move happens <b>instantaneously</b>: no time passes and implied vols are unchanged. You are delta-hedged at the current futures price and you <b>do not re-hedge</b> during the move.</p>`},
+  day:{title:'Scenario PnL — over one day',tag:'Gamma vs theta',
+    d:()=>`<p>Each move happens <b>over the course of one day</b>: one calendar day of time decay passes, implied vols are unchanged. You do not re-hedge until the end of the day.</p>`},
+  skew:{title:'Scenario PnL — with volatility skew',tag:'Skew / ν',
+    d:q=>`<p>The vol surface now has <b>skew</b>. As the future moves, ATM implied vol moves along the curve below, and <b>every strike and expiry shifts in parallel</b> by that change in ATM vol. Moves are instantaneous (no decay) and you do not re-hedge during them. Re-rank the scenarios with this in mind.</p>${skewSVG(q.sk,q.sc)}`},
+  hedge:{title:'Scenario PnL — re-hedging as you go',tag:'Discrete hedging',
+    d:q=>`<p>The future moves <b>instantaneously and steadily</b> (no reversals) to each level, but you <b>re-hedge back to delta-neutral every ${fmtPx(q.H)} points</b> along the way. No time decay, vols unchanged.</p>`},
+  vol:{title:'Scenario PnL — spot and vol together',tag:'Γ + ν',
+    d:()=>`<p>Each scenario is an <b>instantaneous</b> move in the future <b>together with a change in implied vol</b> (in vol points, applied to every strike of that expiry). No time decay and no re-hedging during the move.</p>`},
+  volday:{title:'Scenario PnL — spot, vol and a day passing',tag:'Γ + Θ + ν',
+    d:()=>`<p>Each scenario happens <b>over the course of one day</b>: the future moves, and implied vol changes (in vol points, every strike of that expiry) by the end of the day. One day of time decay passes, and you only re-hedge at the end of the day.</p>`},
+};
+
+// We make markets in the options (buy on our bid, sell on our offer) but cross the futures spread to hedge
+function makeEdge(){
+  const rows=P.legs.map(l=>{const q=M.quotes[l.exp][l.k][l.type];const px=l.q>0?q.bid:q.ask;const e=Math.round((l.q>0?q.theo-px:px-q.theo)*100)/100;
+    return{l,q,px,e,tot:Math.abs(l.q)*e*M.mult};});
+  const h=-P0.delta,fpx=h>0?M.F+M.fhs:M.F-M.fhs,fcost=Math.abs(h)*M.fhs*M.mult;
+  const optEdge=rows.reduce((s,r)=>s+r.tot,0),total=optEdge-fcost;
+  return{kind:'edge',title:'Edge',tag:'Edge',max:3,
+    html:()=>`<div class="prompt"><p>How much edge did you get going into this position?</p></div>
+      <div class="inrow"><label for="in_edge">Edge ($)</label><input type="text" id="in_edge" autocomplete="off"></div>`,
+    grade(){const u=parseNum(document.getElementById('in_edge').value);if(isNaN(u))return{error:'Enter a number.'};
+      const s=scoreNum(u,total,0);
+      const lr=rows.map(r=>`<tr><td>${r.l.q>0?'+':''}${r.l.q} ${M.two?'E'+(r.l.exp+1)+' ':''}${fmtK(M.strikes[r.l.k])}${r.l.type}</td><td class="n">${r.l.q>0?'bid':'ask'} ${r.px.toFixed(2)}</td><td class="n">${r.q.theo.toFixed(2)}</td><td class="n">${r.e.toFixed(2)}</td><td class="n">${fmtMoney(r.tot)}</td></tr>`).join('');
+      return{pts:s.pts,html:`<table class="qt"><tr><th class="n">Correct</th><th class="n">Yours</th><th class="n">Error</th><th class="n">Pts</th></tr><tr><td class="n"><b>${fmtMoney(total)}</b></td><td class="n">${fmtMoney(u)}</td><td class="n">${(s.err*100).toFixed(0)}%</td><td class="n">${ptsSpan(s.pts,3)}</td></tr></table>
+        <div class="ex"><p>You make the options market, so each option was traded on your price; the futures hedge crosses the spread.</p>
+        <div class="boardwrap"><table class="qt"><tr><th>Trade</th><th class="n">Price</th><th class="n">Theo</th><th class="n">Edge / unit</th><th class="n">Edge × qty × ${M.mult}</th></tr>${lr}
+        <tr><td>${h>=0?'+':''}${fmtNum(h,2)} FUT</td><td class="n">${h>0?'ask':'bid'} ${fpx.toFixed(2)}</td><td class="n">${M.F.toFixed(2)}</td><td class="n">−${M.fhs.toFixed(2)}</td><td class="n">${fmtMoney(-fcost)}</td></tr>
+        <tr><td><b>Total</b></td><td></td><td></td><td></td><td class="n"><b>${fmtMoney(total)}</b></td></tr></table></div></div>`};}};
+}
+const GREEK_ROWS=[{k:'cd',lab:'Cash Δ'},{k:'cg',lab:'Cash Γ'},{k:'cv',lab:'Cash <span class="gk">ν</span>'},{k:'ct',lab:'Cash Θ'}];
+let GROSS=null;
+// Scale below which an answer counts as "near zero". Cash Δ uses the cash Δ a 1% move creates (not the legs' gross
+// delta, which is huge for a hedged book); the other Greeks use 2% of the legs' gross exposure.
+const zeroFloor=k=>k==='cd'?0.1*Math.abs(C0.cg):0.02*GROSS[k]; // gross (sum of |leg|) cash Greeks today, used as scoring floors near zero
+function makeCash(){
+  const h=-P0.delta;
+  const legs=P.legs.map(l=>{const g=legG(l,M.F),F=M.F,m=M.mult;
+    return{l,g,cd:l.q*g.delta*m*F,cg:l.q*g.gamma*m*F*F/100,cv:l.q*g.vega*m,ct:l.q*g.theta*m};});
+  const corr={cd:0,cg:C0.cg,cv:C0.cv,ct:C0.ct};   // net cash Δ is zero: options + futures hedge
+  return{kind:'cash',title:'Cash Greeks of your position',tag:'Cash Greeks',max:12,
+    html:()=>`<div class="prompt"><p>Calculate the cash Greeks of your position.</p></div>
+      <table class="qt gt" style="max-width:360px"><tr><th></th><th>Your answer ($)</th></tr>
+      ${GREEK_ROWS.map(r=>`<tr><td class="lab">${r.lab}</td><td><input type="text" id="in_${r.k}" autocomplete="off"></td></tr>`).join('')}</table>`,
+    grade(){
+      const u=GREEK_ROWS.map(r=>parseNum(document.getElementById('in_'+r.k).value));
+      if(u.some(isNaN))return{error:'Enter a number in every box (e.g. 12,500 or -3.2k).'};
+      let tot=0;const rows=GREEK_ROWS.map((r,i)=>{const s=scoreNum(u[i],corr[r.k],zeroFloor(r.k));tot+=s.pts;
+        return`<tr><td class="lab">${r.lab}</td><td class="n"><b>${fmtMoney(corr[r.k])}</b></td><td class="n">${fmtMoney(u[i])}</td><td class="n">${ptsSpan(s.pts,3)}</td></tr>`;}).join('');
+      const legRows=legs.map(x=>`<tr><td>${x.l.q>0?'+':''}${x.l.q} ${M.two?'E'+(x.l.exp+1)+' ':''}${fmtK(M.strikes[x.l.k])}${x.l.type}</td><td class="n">${x.g.delta.toFixed(3)}</td><td class="n">${fmtMoney(x.cd)}</td><td class="n">${fmtMoney(x.cg)}</td><td class="n">${fmtMoney(x.cv)}</td><td class="n">${fmtMoney(x.ct)}</td></tr>`).join('');
+      return{pts:tot,html:`<table class="qt gt"><tr><th></th><th class="n">Correct</th><th class="n">Yours</th><th class="n">Pts</th></tr>${rows}</table>
+        <div class="ex"><p><b>Working</b> (qty × Greek × ${M.mult} [× F for Δ, × F²/100 for Γ]):</p>
+        <div class="boardwrap"><table class="qt"><tr><th>Leg</th><th class="n">Δ</th><th class="n">Cash Δ</th><th class="n">Cash Γ</th><th class="n">Cash ν</th><th class="n">Cash Θ</th></tr>${legRows}
+        <tr><td>${h>=0?'+':''}${fmtNum(h,2)} FUT</td><td class="n">1.000</td><td class="n">${fmtMoney(h*M.mult*M.F)}</td><td class="n">–</td><td class="n">–</td><td class="n">–</td></tr>
+        <tr><td><b>Total</b></td><td></td><td class="n"><b>${fmtMoney(0)}</b></td><td class="n"><b>${fmtMoney(C0.cg)}</b></td><td class="n"><b>${fmtMoney(C0.cv)}</b></td><td class="n"><b>${fmtMoney(C0.ct)}</b></td></tr></table></div>
+        <p>The futures hedge exactly offsets the options' cash Δ of ${fmtMoney(C0.cd)}, so your position's cash Δ is zero.</p></div>`};
+    }};
+}
+// Cash Greeks of the whole position (options + futures hedge) in a scenario, before any re-hedge at the end
+function greeksAt(s,hedged){
+  const p=port(s.F1,s.dt,s.dv);
+  const net=hedged?0:p.delta-P0.delta;
+  return{cd:net*M.mult*s.F1,cg:p.gamma*M.mult*s.F1*s.F1/100,cv:p.vega*M.mult,ct:p.theta*M.mult};
+}
+
+// Greeks estimate must sit close to the true B-76 value, so marking against it is fair
+const closeEnough=(ap,ex,ref)=>Math.abs(ap-ex)<=0.12*Math.max(Math.abs(ex),ref);
+// Competition ranking (1 = best); values within tol of each other share a rank, e.g. 1, 1, 3
+const rankTies=(vals,tol)=>vals.map(v=>1+vals.filter(w=>w>v+tol).length);
+function makeRank(mode){
+  const F0=M.F;let H=null,sk=null;
+  if(mode==='hedge')H=nearestNice(M.spacing/5);
+  if(mode==='skew')sk=genSkew();
+  for(let tries=0;tries<100;tries++){
+    const scale=[1,0.7,0.5,0.35][Math.floor(tries/25)];
+    let levels;
+    if(mode==='hedge'){levels=[];
+      for(const n0 of shuffle([-10,-8,-6,-5,-4,-3,3,4,5,6,8,10])){const n=Math.sign(n0)*Math.max(2,Math.round(Math.abs(n0)*scale));
+        const x=rd(F0+n*H);if(x>0&&!levels.includes(x))levels.push(x);if(levels.length===3)break;}
+      if(levels.length<3)levels=null;}
+    else levels=randLevels(3,undefined,scale);
+    if(!levels)continue;
+    levels.sort((x,y)=>x-y);   // scenarios A, B, C in increasing futures price
+    const sc=levels.map((F1,i)=>{let dt=0,dv=[0,0];
+      if(mode==='day'||mode==='volday')dt=1/365;
+      if(mode==='skew'){const d=sk.vol(F1)-sk.v0;dv=[d,d];}
+      if(mode==='vol'||mode==='volday'){const a=pick([-4,-3,-2,-1,1,2,3,4]);dv=[a,M.two?Math.round(a*pick([0,0.5,1,-0.5])):0];}
+      const n=H?Math.round(Math.abs(F1-F0)/H):0;
+      return{label:'ABC'[i],F1,dt,dv,n,exact:H?pnlPath(F1,n):pnlJump(F1,dt,dv),approx:approxPnl(F1,dt,dv,H)};});
+    const mx=Math.max(...sc.map(s=>Math.abs(s.approx)));if(!(mx>0))continue;
+    if(!sc.every(s=>closeEnough(s.approx,s.exact,0.15*mx)))continue;
+    // PnLs within 3% of the largest count as tied (equal rank); otherwise the true ordering must agree with the estimate
+    const tol=0.03*mx;
+    const clear=(a,b)=>Math.abs(a.approx-b.approx)>tol;
+    if(sc.some(a=>sc.some(b=>clear(a,b)&&(a.approx>b.approx)!==(a.exact>b.exact))))continue;
+    if(sc.some(a=>sc.some(b=>a!==b&&Math.abs(a.approx-b.approx)>tol&&Math.abs(a.approx-b.approx)<0.06*mx)))continue;   // avoid near-ties that are hard to call
+    const ranks=rankTies(sc.map(s=>s.approx),tol);sc.forEach((s,i)=>s.rank=ranks[i]);
+    const q={kind:'rank',mode,sc,H,sk,floor:0.1*mx,max:12,title:MODE_TEXT[mode].title,tag:MODE_TEXT[mode].tag};
+    const volCol=mode==='skew'||mode==='vol'||mode==='volday';
+    sc.forEach(s=>s.g=greeksAt(s,!!H));
+    const floors={};for(const r of GREEK_ROWS)floors[r.k]=Math.max(0.1*Math.max(...sc.map(s=>Math.abs(s.g[r.k]))),zeroFloor(r.k));
+    q.max=GREEK_ROWS.length*9+9+3;   // 4 Greeks × 3 scenarios, 3 PnLs (3 pts each) + ranking (1 pt each)
+    const head=`<tr><th></th>${sc.map(s=>`<th class="n">${s.label}</th>`).join('')}</tr>
+      <tr><td class="lab">F</td>${sc.map(s=>`<td class="n">${fmtPx(s.F1)}<br><span class="muted">${fmtMove(s.F1)}</span></td>`).join('')}</tr>
+      ${volCol?`<tr><td class="lab">${mode==='skew'?'ATM vol':'Δvol'}</td>${sc.map(s=>`<td class="n">${mode==='skew'?`${fmtNum(sk.v0+s.dv[0],1)}%<br><span class="muted">${s.dv[0]>=0?'+':''}${fmtNum(s.dv[0],1)}</span>`:(M.two?`${s.dv[0]>=0?'+':''}${s.dv[0]} / ${s.dv[1]>=0?'+':''}${s.dv[1]}`:`${s.dv[0]>=0?'+':''}${s.dv[0]}`)}</td>`).join('')}</tr>`:''}
+      ${mode==='hedge'?`<tr><td class="lab">Re-hedges</td>${sc.map(s=>`<td class="n">${s.n}</td>`).join('')}</tr>`:''}`;
+    q.html=()=>`<div class="prompt">${MODE_TEXT[mode].d(q)}<p>Estimate the cash Greeks of your position${H?' after the last re-hedge':''} at each futures level, and your PnL (options + futures hedge) in each scenario. Your scenarios are ranked from your PnL estimates.${M.two&&volCol?' Δvol is shown as Exp 1 / Exp 2.':''}</p></div>
+      <table class="qt gt">${head}
+      ${GREEK_ROWS.map(r=>`<tr><td class="lab">${r.lab}</td>${sc.map((_,i)=>`<td><input type="text" id="g_${r.k}_${i}" autocomplete="off"></td>`).join('')}</tr>`).join('')}
+      <tr><td class="lab">PnL</td>${sc.map((_,i)=>`<td><input type="text" id="pl_${i}" autocomplete="off"></td>`).join('')}</tr></table>`;
+    q.grade=()=>{
+      const ug={};for(const r of GREEK_ROWS)ug[r.k]=sc.map((_,i)=>parseNum(document.getElementById(`g_${r.k}_${i}`).value));
+      const pl=sc.map((_,i)=>parseNum(document.getElementById('pl_'+i).value));
+      if(pl.some(isNaN)||GREEK_ROWS.some(r=>ug[r.k].some(isNaN)))return{error:'Fill in every cell (e.g. 12,500 or -3.2k).'};
+      const yourRank=rankTies(pl,0.03*Math.max(...pl.map(Math.abs)));
+      let tot=0,rp=0;
+      const cell=(c,u,p,bold)=>`<td class="n">${bold?'<b>':''}${fmtMoney(c)}${bold?'</b>':''}<br><span class="muted">${fmtMoney(u)}</span> ${ptsSpan(p,3)}</td>`;
+      const gRows=GREEK_ROWS.map(r=>`<tr><td class="lab">${r.lab}</td>${sc.map((s,i)=>{const p=scoreNum(ug[r.k][i],s.g[r.k],floors[r.k]).pts;tot+=p;return cell(s.g[r.k],ug[r.k][i],p,true);}).join('')}</tr>`).join('');
+      const pRow=`<tr><td class="lab">PnL</td>${sc.map((s,i)=>{const p=scoreNum(pl[i],s.approx,q.floor).pts;tot+=p;return cell(s.approx,pl[i],p,true);}).join('')}</tr>`;
+      const tRow=`<tr><td class="lab">True PnL</td>${sc.map(s=>`<td class="n">${fmtMoney(s.exact)}</td>`).join('')}</tr>`;
+      const rRow=`<tr><td class="lab">Rank</td>${sc.map((s,i)=>{const ok=yourRank[i]===s.rank;if(ok)rp++;return`<td class="n">${s.rank} ${ok?'✓':`<span class="neg">(you ${yourRank[i]})</span>`}</td>`;}).join('')}</tr>`;
+      tot+=rp;
+      return{pts:tot,html:`<p class="muted">Each cell: correct value, then <span class="muted">yours</span> and points. PnL is marked against the Greeks estimate; the true Black-76 PnL is shown below it. Ranking ${ptsSpan(rp,3)}.</p>
+        <table class="qt gt"><tr><th></th>${sc.map(s=>`<th class="n">${s.label} · ${fmtPx(s.F1)}</th>`).join('')}</tr>${gRows}${pRow}${tRow}${rRow}</table>
+        <div class="ex">${rankExplain(q)}</div>`};
+    };
+    return q;
+  }
+  return null;
+}
+function rankExplain(q){
+  const g=P0.gamma*M.mult;
+  let s=`<p><b>Greeks estimate:</b> with Γ$ = Γ × multiplier = ${fmtMoneySig(g)} per point² (= Cash Γ × 100 / F²), `;
+  if(q.mode==='hedge')s+=`each ${fmtPx(q.H)}-point leg earns ≈ ½ Γ$ H², so n legs earn ≈ ½ Γ$ × H × |ΔF|. Compare with ½ Γ$ ΔF² if you never re-hedged — frequent hedging of a one-way move locks in only a small slice of the gamma PnL (and limits losses if you are short gamma).</p>`;
+  else{s+=`PnL ≈ ½ Γ$ ΔF²`;
+    if(q.mode==='day'||q.mode==='volday')s+=` + Cash Θ (${fmtMoney(C0.ct)}) for the day`;
+    if(q.mode==='skew'||q.mode==='vol'||q.mode==='volday')s+=M.two?` + Cash ν per expiry × Δvol (Exp1 ${fmtMoney(P0.vegaE[0]*M.mult)}, Exp2 ${fmtMoney(P0.vegaE[1]*M.mult)} per vol pt)`:` + Cash ν (${fmtMoney(C0.cv)}) × Δvol`;
+    s+='.</p>';}
+  s+=`<p>The <b>true</b> column is a full Black-76 revaluation of every option plus the futures hedge. The small gap comes from the Greeks themselves changing over the move (gamma changing with spot, ν with vol, etc.).</p>`;
+  if(q.mode==='skew')s+=`<p>Skew slope ${q.sk.s>0?'+':''}${q.sk.s} vol pts per strike (${q.sk.s<0?'vol rises as the market falls':'vol rises as the market rallies'}). With cash ν ${fmtMoney(C0.cv)}, the vol change ${C0.cv*q.sk.s<0?'adds to downside moves and subtracts from upside moves':'adds to upside moves and subtracts from downside moves'} relative to the flat-vol case.</p>`;
+  return s;
+}
+
+/* numeric single-answer questions: c = Greeks estimate (marked), tv = true B-76 value (shown) */
+const NUMQ={
+  volpnl(){const v=pick([-3,-2,-1,1,2,3]);const tv=pnlJump(M.F,0,[v,v]);const ap=C0.cv*v;
+    const gross=P.legs.reduce((s,l)=>s+Math.abs(l.q*legG(l,M.F).vega*M.mult),0)*Math.abs(v);
+    if(!closeEnough(ap,tv,0.05*gross))return null;
+    return{title:'Vol shock PnL',tag:'ν',unit:'$',c:ap,tv,floor:0.02*gross,
+      prompt:`Implied vol ${v>0?'rises':'falls'} by <b>${Math.abs(v)} vol point${Math.abs(v)>1?'s':''}</b> across every strike${M.two?' and expiry':''}, instantly, with the future unchanged. Estimate your PnL.`,
+      ex:`Cash ν × Δvol = ${fmtMoney(C0.cv)} × ${v} = <b>${fmtMoney(ap)}</b>. True revaluation: ${fmtMoney(tv)} (the gap is ν convexity — volga).`};},
+  daypnl(){const tv=pnlJump(M.F,1/365);const gross=P.legs.reduce((s,l)=>s+Math.abs(l.q*legG(l,M.F).theta*M.mult),0);
+    if(!closeEnough(C0.ct,tv,0.05*gross))return null;
+    return{title:'Quiet day PnL',tag:'Θ',unit:'$',c:C0.ct,tv,floor:0.02*gross,
+      prompt:`Tomorrow the future settles exactly where it is now (${fmtPx(M.F)}) and implied vols are unchanged. Estimate your PnL.`,
+      ex:`With no move there is no gamma PnL, so you just earn/pay one day of cash Θ: <b>${fmtMoney(C0.ct)}</b>. True: ${fmtMoney(tv)}.`};},
+  newhedge(){const X=randLevels(1,[-1.5,-1,-0.75,-0.5,0.5,0.75,1,1.5]);if(!X)return null;const x=X[0];
+    const tv=-(port(x).delta-P0.delta);const ap=-P0.gamma*(x-M.F);const gross=P.legs.reduce((s,l)=>s+Math.abs(l.q),0);
+    if(Math.abs(ap)<0.01*gross||!closeEnough(ap,tv,0.02*gross))return null;
+    return{title:'Re-hedge after a move',tag:'Gamma',unit:'futures',c:ap,tv,floor:0.02*gross,money:false,
+      prompt:`The future moves instantly to <b>${fmtPx(x)}</b> (${fmtMove(x)}). How many futures must you trade to get back to delta-neutral? Enter <b>+ to buy, − to sell</b>.`,
+      ex:`Your options' delta changes by ≈ Γ × ΔF = ${fmtSig(P0.gamma)} × ${fmtNum(x-M.F,M.pdec)} = ${fmtNum(-ap,2)}, so you trade ≈ <b>${fmtNum(ap,2)}</b> futures (${ap>0?'buy':'sell'}). Equivalently Cash Γ × move% / (F × mult). True: options delta goes from ${fmtNum(P0.delta,2)} to ${fmtNum(port(x).delta,2)}, a trade of ${fmtNum(tv,2)}.`};},
+  breakeven(){if(P0.gamma*P0.theta>=0||Math.abs(C0.cg)<1e-9)return null;
+    const f=b=>pnlJump(M.F+b,1/365);const bg=Math.sqrt(2*Math.abs(P0.theta)/Math.abs(P0.gamma));
+    const root=sgn=>{let lo=0,hi=bg*6;if(M.F+sgn*hi<=0)hi=(M.F-1e-6)*0.99;const f0=f(0);if(Math.sign(f(sgn*hi))===Math.sign(f0))return null;
+      for(let i=0;i<60;i++){const m=(lo+hi)/2;if(Math.sign(f(sgn*m))===Math.sign(f0))lo=m;else hi=m;}return (lo+hi)/2;};
+    const up=root(1),dn=root(-1);if(up==null||dn==null)return null;const tv=(up+dn)/2;
+    if(!closeEnough(bg,tv,0))return null;
+    return{title:'Daily breakeven move',tag:'Gamma vs theta',unit:'points',c:bg,tv,floor:0,money:false,
+      prompt:`How far (in futures points, either direction) does the market need to move by tomorrow for your gamma PnL to exactly offset one day of theta? (You only re-hedge at the end of the day.)`,
+      ex:`Set ½ Γ$ ΔF² = |Cash Θ|: ΔF = √(2 × ${fmtMoney(Math.abs(C0.ct))} / ${fmtMoneySig(Math.abs(P0.gamma*M.mult))}) = <b>${fmtNum(bg,2)}</b> points (${(bg/M.F*100).toFixed(2)}%). True revaluation: +${fmtNum(up,2)} up / −${fmtNum(dn,2)} down. ${P0.gamma>0?'Moves bigger than this make you money.':'Moves bigger than this lose you money.'} For a single-expiry position this is σ<sub>implied</sub> × F / √365 ≈ ${fmtNum(M.exps[0].vol*M.F/Math.sqrt(365),2)}.`};},
+  volmove(){const X=randLevels(1,[-1.5,-1,-0.75,-0.5,0.5,0.75,1,1.5]);if(!X)return null;const x=X[0];
+    const v=pick([-3,-2,-1,1,2,3]);
+    const tv=pnlJump(x,1/365,[v,v]);const ap=approxPnl(x,1/365,[v,v]);
+    const mx=Math.max(Math.abs(0.5*P0.gamma*M.mult*(x-M.F)**2),Math.abs(C0.ct),Math.abs(C0.cv*v));
+    if(!closeEnough(ap,tv,0.15*mx))return null;
+    return{title:'Spot, vol and time together',tag:'Γ + Θ + ν',unit:'$',c:ap,tv,floor:0.1*mx,
+      prompt:`Over the course of one day the future moves to <b>${fmtPx(x)}</b> (${fmtMove(x)}) and implied vol ${v>0?'rises':'falls'} <b>${Math.abs(v)} point${Math.abs(v)>1?'s':''}</b> across the board. You re-hedge only at the end of the day. Estimate your PnL.`,
+      ex:`½ Γ$ ΔF² = ${fmtMoney(0.5*P0.gamma*M.mult*(x-M.F)**2)}, theta ${fmtMoney(C0.ct)}, ν ${fmtMoney(C0.cv)} × ${v} = ${fmtMoney(C0.cv*v)} → <b>${fmtMoney(ap)}</b>. True: ${fmtMoney(tv)}.`};},
+};
+function makeNum(type){
+  const d=NUMQ[type]();if(!d)return null;
+  const q={kind:'num',title:d.title,tag:d.tag,max:3,
+    html:()=>`<div class="prompt"><p>${d.prompt}</p><p class="muted">Marked against the Greeks estimate (today's Greeks); the true Black-76 value is shown afterwards.</p></div><div class="inrow"><label for="in_num">Your answer <span class="muted">(${d.unit})</span></label><input type="text" id="in_num" autocomplete="off"></div>`,
+    grade(){const u=parseNum(document.getElementById('in_num').value);if(isNaN(u))return{error:'Enter a number.'};
+      const s=scoreNum(u,d.c,d.floor);const f=d.money===false?x=>fmtNum(x,2):x=>fmtMoney(x);
+      return{pts:s.pts,html:`<table class="qt"><tr><th class="n">Greeks estimate (marked)</th><th class="n">True (B-76)</th><th class="n">Yours</th><th class="n">Error</th><th class="n">Pts</th></tr><tr><td class="n"><b>${f(d.c)}</b></td><td class="n">${f(d.tv)}</td><td class="n">${f(u)}</td><td class="n">${(s.err*100).toFixed(0)}%</td><td class="n">${ptsSpan(s.pts,3)}</td></tr></table><div class="ex"><p>${d.ex}</p></div>`};}};
+  return q;
+}
+
+/* true / false */
+const TFQ={
+  gammaSign(){const gross=P.legs.reduce((s,l)=>s+Math.abs(l.q*legG(l,M.F).gamma),0);if(Math.abs(P0.gamma)<0.05*gross)return null;
+    const say=pick(['long','short']);const a=say==='long'?P0.gamma>0:P0.gamma<0;
+    return{s:`Your position is ${say} gamma.`,a,ex:`Cash gamma is ${fmtMoney(C0.cg)}, so you are ${P0.gamma>0?'long':'short'} gamma.`};},
+  vegaUp(){const v=pick([1,2,3]);const p=pnlJump(M.F,0,[v,v]);if((p>0)!==(C0.cv*v>0))return null;
+    return{s:`If implied vol rises by ${v} point${v>1?'s':''} across all strikes${M.two?' and expiries':''} (future unchanged), you make money.`,a:p>0,ex:`Cash ν ${fmtMoney(C0.cv)} × ${v} ≈ ${fmtMoney(C0.cv*v)}; exact ${fmtMoney(p)}.`};},
+  thetaDay(){const p=pnlJump(M.F,1/365);
+    return{s:`If the future is unchanged tomorrow and vols don't move, you make money.`,a:p>0,ex:`No move means no gamma PnL — you collect/pay one day of theta: cash θ ${fmtMoney(C0.ct)}, exact ${fmtMoney(p)}.`};},
+  nowVsDay(){const X=randLevels(1);if(!X)return null;const x=X[0],a1=pnlJump(x),a2=pnlJump(x,1/365);if(Math.abs(a1-a2)<1)return null;
+    return{s:`Ignoring re-hedging, you would rather the future moved to ${fmtPx(x)} right now than at the end of the day.`,a:a1>a2,
+      ex:`Right now: ${fmtMoney(a1)}. End of day: ${fmtMoney(a2)}. The difference is (mostly) one day of theta at the new level — ${P0.theta<0?'you pay theta, so sooner is better':'you collect theta, so later is better'}.`};},
+  gapVsDrift(){const X=randLevels(1,[-2,-1.5,-1,1,1.5,2]);if(!X)return null;const x=X[0];
+    const gap=pnlJump(x),drift=pnlPath(x,400,1/365);if(Math.abs(gap-drift)<0.03*Math.max(Math.abs(gap),Math.abs(drift),1))return null;
+    return{s:`It is better for you if the future jumps to ${fmtPx(x)} right now than if it drifts there smoothly over the course of the day while you re-hedge continuously.`,a:gap>drift,
+      ex:`Jump now: ${fmtMoney(gap)} (full gamma PnL, no decay). Smooth drift with continuous hedging: ${fmtMoney(drift)} — a smooth one-way path realises almost no gamma PnL, and you ${P0.theta<0?'pay':'collect'} a day of theta. ${P0.gamma>0?'Long gamma loves gaps.':'Short gamma prefers smooth moves it can hedge.'}`};},
+  rehedge(){const X=randLevels(1,[-2,-1.5,-1,1,1.5,2]);if(!X)return null;const x=X[0];const trade=-(port(x).delta-P0.delta);
+    if(Math.abs(trade)<0.01*P.legs.reduce((s,l)=>s+Math.abs(l.q),0))return null;const say=pick(['buy','sell']);
+    return{s:`If the future moves to ${fmtPx(x)}, you will need to <b>${say}</b> futures to get back to delta-neutral.`,a:say==='buy'?trade>0:trade<0,
+      ex:`Options delta goes from ${fmtNum(P0.delta,2)} to ${fmtNum(port(x).delta,2)}, so you must ${trade>0?'buy':'sell'} ${fmtNum(Math.abs(trade),2)} futures. ${P0.gamma>0?'Long gamma: sell rallies, buy dips.':'Short gamma: buy rallies, sell dips.'}`};},
+  compare(){const X=randLevels(2);if(!X)return null;const[a,b]=X,pa=pnlJump(a),pb=pnlJump(b);
+    if(Math.abs(pa-pb)<0.05*Math.max(Math.abs(pa),Math.abs(pb)))return null;
+    if((pa>pb)!==(approxPnl(a)>approxPnl(b)))return null;
+    return{s:`Your PnL is higher if the future moves instantly to ${fmtPx(a)} than if it moves instantly to ${fmtPx(b)}.`,a:pa>pb,ex:`To ${fmtPx(a)}: ${fmtMoney(pa)}. To ${fmtPx(b)}: ${fmtMoney(pb)}.`};},
+  volSelloff(){const X=randLevels(1,[-2,-1.5,-1]);if(!X)return null;const x=X[0],v=pick([2,3,4,5]);const p=pnlJump(x,0,[v,v]);if((p>0)!==(approxPnl(x,0,[v,v])>0))return null;
+    return{s:`If the future drops instantly to ${fmtPx(x)} and implied vols rise ${v} points at the same time, you make money.`,a:p>0,
+      ex:`Gamma ≈ ${fmtMoney(0.5*P0.gamma*M.mult*(x-M.F)**2)}, ν ≈ ${fmtMoney(C0.cv*v)}; exact total ${fmtMoney(p)}.`};},
+  gammaMove(){const X=randLevels(1,[-2,-1.5,-1,1,1.5,2]);if(!X)return null;const x=X[0];const cg=cashOf(port(x),x).cg;
+    if(Math.abs(cg-C0.cg)<0.05*Math.max(Math.abs(cg),Math.abs(C0.cg)))return null;
+    return{s:`Your cash gamma would be higher (more positive) with the future at ${fmtPx(x)} than it is now.`,a:cg>C0.cg,ex:`Cash Γ now ${fmtMoney(C0.cg)}; at ${fmtPx(x)} it would be ${fmtMoney(cg)}.`};},
+  hedgeVsNone(){const H=nearestNice(M.spacing/5);const n=pick([5,8,10])*(Math.random()<0.5?-1:1);const x=rd(M.F+n*H);if(x<=0)return null;
+    const h=pnlPath(x,Math.abs(n)),none=pnlJump(x);if(Math.abs(h-none)<1)return null;
+    return{s:`If the future moves steadily to ${fmtPx(x)}, re-hedging every ${fmtPx(H)} points along the way leaves you better off than not re-hedging at all.`,a:h>none,
+      ex:`Re-hedging: ${fmtMoney(h)}. No re-hedge: ${fmtMoney(none)}. On a one-way move, hedging ${P0.gamma>0?'gives away most of your long-gamma profit':'cuts your short-gamma losses'}.`};},
+  thetaVsVega(){if(Math.abs(Math.abs(C0.ct)-Math.abs(C0.cv))<0.05*Math.max(Math.abs(C0.ct),Math.abs(C0.cv)))return null;
+    return{s:`One day of theta is worth more (in absolute dollars) than a 1-point move in implied vol.`,a:Math.abs(C0.ct)>Math.abs(C0.cv),ex:`|Cash Θ| = ${fmtMoney(Math.abs(C0.ct))} vs |Cash ν| = ${fmtMoney(Math.abs(C0.cv))}.`};},
+  breakevenTF(){if(P0.gamma*P0.theta>=0)return null;const b=Math.sqrt(2*Math.abs(P0.theta)/Math.abs(P0.gamma));
+    const y=rd(Math.max(M.lvlTick,Math.round(b*pick([0.5,1.7])/M.lvlTick)*M.lvlTick));const dir=pick([1,-1]);if(M.F+dir*y<=0)return null;const p=pnlJump(M.F+dir*y,1/365);if((p>0)!==(approxPnl(M.F+dir*y,1/365)>0))return null;
+    return{s:`If the future is ${dir>0?'up':'down'} ${fmtPx(y)} points by tomorrow (re-hedging only at the end of the day), you make money overall.`,a:p>0,
+      ex:`Breakeven move ≈ √(2|θ|/Γ) = ${fmtNum(b,2)} points. Exact PnL for this move: ${fmtMoney(p)}.`};},
+  volTimingHedged(){return volTiming(0);},
+  volTimingDay(){return volTiming(1/365);},
+  frontVol(){if(!M.two)return null;const v=pick([2,3]);const p=pnlJump(M.F,0,[v,0]);if(Math.abs(p)<1)return null;
+    return{s:`If only Exp 1 (front) implied vol rises ${v} points, with Exp 2 and the future unchanged, you make money.`,a:p>0,ex:`Exp 1 cash ν is ${fmtMoney(P0.vegaE[0]*M.mult)} per point → exact PnL ${fmtMoney(p)}.`};},
+  frontGamma(){if(!M.two)return null;const g0=Math.abs(P0.gammaE[0]),g1=Math.abs(P0.gammaE[1]);if(Math.abs(g0-g1)<0.05*Math.max(g0,g1))return null;
+    const cg=g=>fmtMoney(g*M.mult*M.F*M.F/100);
+    return{s:`Your front-expiry options carry more gamma (in absolute terms) than your back-expiry options.`,a:g0>g1,ex:`Cash Γ: Exp 1 ${cg(P0.gammaE[0])}, Exp 2 ${cg(P0.gammaE[1])}. Shorter-dated options carry more gamma per option near the money.`};},
+};
+// Vol moves gradually throughout a move vs all at once after it, while re-hedging every H points along the way
+// (optionally over one day). Re-hedging makes the vol path matter: each hedge uses the delta (and each step's
+// gamma and theta) at the vol prevailing at that moment.
+function volTiming(dt){
+  const H=nearestNice(M.spacing/5);const n=pick([4,5,6,8])*(Math.random()<0.5?-1:1);const x=rd(M.F+n*H);if(x<=0)return null;
+  const v=pick([-3,-2,2,3]);const during=pnlPath(x,Math.abs(n),dt,[v,v]);
+  const after=pnlPath(x,Math.abs(n),dt)+M.mult*(port(x,dt,[v,v]).value-port(x,dt).value);
+  if(Math.abs(during-after)<Math.max(1,0.03*Math.max(Math.abs(during),Math.abs(after))))return null;
+  const mv=v>0?'rises':'falls',first=pick(['throughout','after']);
+  const when=w=>w==='throughout'?`gradually <b>throughout</b> the move`:`only <b>after</b> the move`;
+  return{s:`The future moves steadily to ${fmtPx(x)}${dt?' over the course of one day':''}, and you re-hedge every ${fmtPx(H)} points along the way. Implied vol ${mv} ${Math.abs(v)} points. You are better off if vol ${mv} ${when(first)} than if it ${mv} ${when(first==='throughout'?'after':'throughout')}.`,
+    a:first==='throughout'?during>after:after>during,
+    ex:`Vol throughout: ${fmtMoney(during)}. Vol after: ${fmtMoney(after)}. Because you re-hedge along the way, each hedge uses the delta at the vol prevailing at that moment (vanna — your options' delta changes by ${fmtNum((port(M.F,0,[1,1]).delta-P0.delta),2)} futures per vol point)${dt?', and the gamma you realise and theta you pay on each step depend on the vol at the time':''}.`};
+}
+function makeTF(type){
+  const d=TFQ[type]();if(!d)return null;
+  const q={kind:'tf',title:'True or false?',tag:'True / False',max:1,
+    html:()=>`<div class="statement">${d.s}</div><div class="tf"><button data-tf="1">True</button><button data-tf="0">False</button></div>`,
+    grade(ans){const ok=ans===d.a;return{pts:ok?1:0,html:`<p>The statement is <b>${d.a?'TRUE':'FALSE'}</b>. ${ptsSpan(ok?1:0,1)}</p><div class="ex"><p>${d.ex}</p></div>`};}};
+  return q;
+}
+
+function buildQuestions(n){
+  const qs=[makeEdge(),makeCash()];
+  const first=makeRank('instant');if(first&&qs.length<n)qs.push(first);
+  const rankOrder=['day','skew','hedge','vol','volday'];
+  let rq=[...rankOrder],nq=[],tq=[],pi=0;
+  const pattern=['tf','rank','num','tf','rank'];
+  const nextFrom=(queue,refill,maker)=>{for(let g=0;g<40;g++){if(!queue.length)queue.push(...refill());const t=queue.shift();const q=maker(t);if(q)return q;}return null;};
+  let guard=0;
+  while(qs.length<n&&guard++<200){
+    const kind=pattern[pi++%pattern.length];let q=null;
+    if(kind==='rank')q=nextFrom(rq,()=>shuffle(['instant',...rankOrder]),makeRank);
+    else if(kind==='num')q=nextFrom(nq,()=>shuffle(Object.keys(NUMQ)),makeNum);
+    else q=nextFrom(tq,()=>shuffle(Object.keys(TFQ)),makeTF);
+    if(q)qs.push(q);
+  }
+  return qs;
+}
+
+/* ================= rendering ================= */
+function renderTop(){
+  const tb=document.getElementById('topbar');
+  tb.innerHTML=`<span class="brand">Greeks Risk Quiz</span><span class="score">${S&&M?`Q ${Math.min(S.qi+1,S.qs.length)}/${S.qs.length} · Score ${S.score}/${S.maxSoFar}`:''}</span>
+    <button id="fsbtn" class="fs" title="Toggle full screen (F)">${document.fullscreenElement?'⤡ Exit full screen':'⤢ Full screen'}</button>`;
+  document.getElementById('fsbtn').onclick=toggleFS;
+}
+function renderBoard(e){
+  const ex=M.exps[e];
+  const qty=(t,k)=>{const l=P.legs.find(l=>l.exp===e&&l.type===t&&l.k===k);return l?l.q:0;};
+  const pc=q=>q?`<td class="pq ${q>0?'long':'short'}">${q>0?'+':''}${q}</td>`:'<td class="pq"></td>';
+  const mk=q=>`<td class="bid">${q.bid.toFixed(2)}</td><td class="ask">${q.ask.toFixed(2)}</td><td class="theo">${q.theo.toFixed(2)}</td>`;
+  // With r = 0, put Δ = call Δ − 1 and Γ / ν / Θ are identical for the call and put at a strike
+  const rows=M.strikes.map((K,i)=>{const c=black(M.F,K,ex.T,ex.vol,'C'),Q=M.quotes[e][i];
+    return`<tr class="${i===MID?'atm':''}">${mk(Q.C)}${pc(qty('C',i))}<td class="k">${fmtK(K)}</td>${pc(qty('P',i))}${mk(Q.P)}<td class="gsep">${c.delta.toFixed(3)}</td><td>${c.gamma.toFixed(4)}</td><td>${c.vega.toFixed(3)}</td><td>${c.theta.toFixed(4)}</td></tr>`;}).join('');
+  const w=[7,7,7.5,6.5,8,6.5,7,7,7.5,8,9,8,10.5];
+  return`<div><div class="exphead"><b>Exp ${e+1} — ${dateLbl(ex.date)}</b><span class="muted mono">${ex.days}d · IV ${(ex.vol*100).toFixed(1)}%</span></div>
+  <div class="boardwrap"><table class="board"><colgroup>${w.map(x=>`<col style="width:${x}%">`).join('')}</colgroup><thead>
+  <tr><th class="side" colspan="4">CALLS</th><th></th><th class="side" colspan="4">PUTS</th><th class="side gsep" colspan="4">GREEKS</th></tr>
+  <tr><th>Bid</th><th>Ask</th><th>Theo</th><th style="text-align:center">Pos</th><th style="text-align:center">K</th><th style="text-align:center">Pos</th><th>Bid</th><th>Ask</th><th>Theo</th><th class="gsep">Δ<sub>C</sub></th><th>Γ</th><th><span class="gk">ν</span></th><th>Θ</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function renderPosition(){
+  const el=document.getElementById('futbar');if(!el)return;
+  const h=-P0.delta;
+  el.innerHTML=`<div class="futrow"><span class="fname">${M.futName}</span>
+    <span><span class="muted">Bid</span> <b class="bid">${(M.F-M.fhs).toFixed(2)}</b></span><span><span class="muted">Ask</span> <b class="ask">${(M.F+M.fhs).toFixed(2)}</b></span>
+    <span><span class="muted">Theo</span> <b>${M.F.toFixed(2)}</b></span><span class="muted">Multiplier ${M.mult}</span></div>
+  <div class="legs"><span class="muted" style="align-self:center">${esc(P.name)}, delta-hedged:</span>${P.legs.map(l=>`<span class="leg ${l.q>0?'long':'short'}">${l.q>0?'+':''}${l.q} ${M.two?'E'+(l.exp+1)+' ':''}${fmtK(M.strikes[l.k])}${l.type}</span>`).join('')}
+  <span class="leg ${h>0?'long':'short'}">${h>=0?'+':''}${fmtNum(h,2)} FUT</span></div>`;
+}
+const CONV=()=>`<details class="conv"><summary>Conventions & scoring</summary><ul>
+  <li>Black-76 (Black–Scholes on a futures price), zero rates, one flat implied vol per expiry, T = calendar days / 365. Each option exercises into one future; each future delivers <i>multiplier</i> units of the underlying.</li>
+  <li>Board Greeks are per option: Δ per 1 future, Γ per 1-point move, ν per 1 vol point, Θ per calendar day.</li>
+  <li>Cash Δ = Σ qty·Δ·mult·F &nbsp;·&nbsp; Cash Γ = Σ qty·Γ·mult·F²/100 &nbsp;·&nbsp; Cash ν = Σ qty·ν·mult &nbsp;·&nbsp; Cash Θ = Σ qty·Θ·mult.</li>
+  <li>PnL ≈ ½·Γ·mult·ΔF² + Cash Θ·days + Cash ν·Δvol. PnL answers are marked against this Greeks estimate (today's Greeks); the true Black-76 PnL is shown alongside, and moves are kept small enough that the two stay close.</li>
+  <li>Within 10% → 3 pts, 20% → 2, 30% → 1, else 0, measured against |correct| with a small floor so near-zero answers are gradeable. Ranking: 1 pt per scenario in the right place (taken from your PnL estimates). True/false: 1 pt.</li>
+  <li>Edge: you make markets in the options, so options you bought were bought on your bid and options you sold were sold on your offer; edge = |theo − trade price| × qty × multiplier. The futures hedge crosses the futures spread, costing half the spread × hedge size × multiplier.</li>
+  <li>Inputs accept <code>12500</code>, <code>12,500</code>, <code>12.5k</code>, <code>-1.2m</code>, <code>(500)</code>.</li></ul></details>`;
+
+function renderSetup(){
+  M=null;S=null;renderTop();
+  const opts=TEMPLATES.map(t=>`<option value="${esc(t.name)}" ${t.cal?'data-cal="1"':''}>${esc(t.name)}${t.cal?' (needs 2nd expiry)':''}</option>`).join('');
+  document.getElementById('app').innerHTML=`<div class="card setup">
+    <h1>Greeks Risk Quiz</h1>
+    <p class="muted">You'll be given a random futures market, a 15-strike options board priced with Black-76, and an options position that is perfectly delta-hedged with futures. Work out your cash Greeks, then estimate cash Greeks and PnL across scenarios: instantaneous moves, moves over a day, skew, discrete re-hedging and vol changes — plus quick true/false questions.</p>
+    <div class="row"><label for="nq">Number of questions</label><input type="range" id="nq" min="5" max="25" value="${SET.n}"><span class="big" id="nqv">${SET.n}</span></div>
+    <div class="row"><label for="two">Second expiration</label><input type="checkbox" id="two" ${SET.two?'checked':''}><span class="muted">Adds a second expiry so calendars, diagonals and other term-structure spreads can appear</span></div>
+    <div class="row"><label for="tmpl">Position type</label><select id="tmpl"><option value="random">Random</option>${opts}</select></div>
+    <div class="actions"><button class="primary" id="start">Start quiz</button></div>
+    <div style="margin-top:14px">${CONV()}</div></div>`;
+  const nq=document.getElementById('nq');nq.oninput=()=>{document.getElementById('nqv').textContent=nq.value;};
+  document.getElementById('tmpl').value=SET.tmpl;
+  document.getElementById('start').onclick=()=>{
+    SET.n=+nq.value;SET.two=document.getElementById('two').checked;SET.tmpl=document.getElementById('tmpl').value;
+    const t=TEMPLATES.find(x=>x.name===SET.tmpl);if(t&&t.cal&&!SET.two){SET.two=true;}
+    startQuiz();};
+}
+function startQuiz(){
+  for(let tries=0;tries<30;tries++){
+    M=genMarket(SET.two);P=genPosition(SET.two,SET.tmpl);P0=port(M.F);C0=cashOf(P0,M.F);
+    GROSS={cd:0,cg:0,cv:0,ct:0};
+    for(const l of P.legs){const c=cashOf(port1(l),M.F);for(const k in GROSS)GROSS[k]+=Math.abs(c[k]);}
+    // avoid degenerate positions, and markets where no small moves give a fair Greeks-based ranking
+    if(Math.abs(C0.cv)>1&&Math.abs(C0.ct)>0.5&&makeRank("instant"))break;
+  }
+  S={qs:[],qi:0,score:0,maxSoFar:0,log:[]};
+  S.qs=buildQuestions(SET.n);
+  const two=M.two?'two':'one';
+  document.getElementById('app').innerHTML=`<div class="quiz ${two}"><div class="pane" id="boardpane">
+     <div class="card"><div id="futbar"></div><div class="boards ${two}">${M.exps.map((_,e)=>renderBoard(e)).join('')}</div><div class="boardnote">Greeks per option. Put Δ = Call Δ − 1; Γ, <span class="gk">ν</span> and Θ are the same for the call and put at each strike.</div></div>
+     ${M.two?'':`<div class="card">${CONV()}</div>`}</div>
+     <div class="pane" id="qcol"><div class="card" id="qcard"></div>${M.two?`<div class="card">${CONV()}</div>`:''}</div></div>`;
+  renderPosition();renderQuestion();
+}
+// Greeks of a single leg as a one-leg portfolio
+function port1(l){const g=legG(l,M.F);return{delta:l.q*g.delta,gamma:l.q*g.gamma,vega:l.q*g.vega,theta:l.q*g.theta};}
+function renderQuestion(){
+  renderTop();
+  const q=S.qs[S.qi],el=document.getElementById('qcard');
+  el.innerHTML=`<div class="qmeta"><span>Question ${S.qi+1} of ${S.qs.length}</span><span class="tag">${q.tag}</span><span>${q.max} pt${q.max>1?'s':''} max</span></div>
+    <h2>${q.title}</h2>${q.html()}<div class="err" id="err"></div>
+    ${q.kind==='tf'?'':'<div class="actions"><button class="primary" id="submit">Submit</button></div>'}
+    <div id="fb"></div>`;
+  const done=r=>{
+    if(r.error){document.getElementById('err').textContent=r.error;return;}
+    document.getElementById('err').textContent='';
+    S.score+=r.pts;S.maxSoFar+=q.max;S.log.push({title:q.title,tag:q.tag,pts:r.pts,max:q.max});
+    el.querySelectorAll('input,select,button').forEach(b=>b.disabled=true);
+    const last=S.qi===S.qs.length-1;
+    document.getElementById('fb').innerHTML=`<div class="feedback"><div class="verdict">You scored ${ptsSpan(r.pts,q.max)}</div>${r.html}
+      <div class="actions"><button class="primary" id="next">${last?'See results':'Next question →'}</button></div></div>`;
+    renderTop();
+    const nb=document.getElementById('next');nb.disabled=false;nb.focus();
+    nb.onclick=()=>{if(last)renderResults();else{S.qi++;renderQuestion();document.getElementById('qcol').scrollTop=0;}};
+  };
+  if(q.kind==='tf')el.querySelectorAll('[data-tf]').forEach(b=>b.onclick=()=>{b.style.outline='2px solid var(--accent)';done(q.grade(b.dataset.tf==='1'));});
+  else{document.getElementById('submit').onclick=()=>done(q.grade());
+    el.querySelectorAll('input[type=text]').forEach(i=>i.addEventListener('keydown',ev=>{if(ev.key==='Enter'){const s=document.getElementById('submit');if(!s.disabled)s.click();}}));
+    const f=el.querySelector('input,select');if(f)f.focus({preventScroll:true});}
+}
+
+/* payoff diagram: PnL of options + hedge at Exp 1 expiry and today (Black-76), plus one curve per scenario
+   condition asked in the quiz (after a day, skew, re-hedging, vol moves). Extra curves start hidden and are
+   toggled from the legend; each scenario's dots sit on (and show/hide with) the curve of its condition. */
+const EXTRA_COLORS=['#c678dd','#56d4c4','#ff7b72','#8bd450','#d19a66','#a5a5ff'];
+function scenarioCurves(){
+  const out=[],byKey=new Map();
+  S.qs.forEach((q,qi)=>{if(q.kind!=='rank')return;
+    q.sc.forEach(s=>{
+      let key,label,fn;
+      if(q.mode==='instant'){key='now';}
+      else if(q.mode==='day'){key='day';label='After 1 day';fn=F=>pnlJump(F,1/365);}
+      else if(q.mode==='skew'){const sk=q.sk;key='skew'+qi;label=`With skew (Q${qi+1})`;fn=F=>{const d=sk.vol(F)-sk.v0;return pnlJump(F,0,[d,d]);};}
+      else if(q.mode==='hedge'){const H=q.H;key='hedge'+H;label=`Re-hedged every ${fmtPx(H)}`;fn=F=>pnlPath(F,Math.max(1,Math.round(Math.abs(F-M.F)/H)));}
+      else{const dt=s.dt,dv=s.dv;key=`${q.mode}${qi}|${dv.join(',')}`;
+        label=`${dt?'1 day, ':''}vol ${M.two?`${dv[0]>=0?'+':''}${dv[0]} / ${dv[1]>=0?'+':''}${dv[1]}`:`${dv[0]>=0?'+':''}${dv[0]}`} (Q${qi+1})`;fn=F=>pnlJump(F,dt,dv);}
+      if(!byKey.has(key)){const c={key,label,fn,dots:[]};byKey.set(key,c);if(key!=='now')out.push(c);}
+      byKey.get(key).dots.push({F:s.F1,v:s.exact,lab:`Q${qi+1}${s.label}`,q:q.title});
+    });});
+  return{extras:out,nowDots:byKey.has('now')?byKey.get('now').dots:[]};
+}
+function payoffSVG(){
+  const W=900,H=380,ml=78,mr=150,mt=18,mb=40;
+  const x0=M.strikes[0],x1=M.strikes[M.strikes.length-1],n=160;
+  const T1=M.exps[0].T;
+  const expPnl=F=>M.mult*((port(F,T1).value-P0.value)-P0.delta*(F-M.F));   // back-month legs still carry time value
+  const xs=[...Array(n+1)].map((_,i)=>x0+(x1-x0)*i/n);
+  const {extras,nowDots}=scenarioCurves();
+  const series=[{key:'exp',label:'At Exp 1 expiry (options + hedge)',color:'var(--amber)',pts:xs.map(F=>[F,expPnl(F)]),dots:[],on:true},
+    {key:'now',label:'Today, Black-76',color:'var(--accent)',pts:xs.map(F=>[F,pnlJump(F)]),dots:nowDots,on:true},
+    ...extras.map((c,i)=>({key:c.key,label:c.label,color:EXTRA_COLORS[i%EXTRA_COLORS.length],dash:i>=EXTRA_COLORS.length?'7 4':'',pts:xs.map(F=>[F,c.fn(F)]),dots:c.dots,on:false}))];
+  // y-range covers every curve, hidden or not, so toggling never rescales the chart
+  const all=series.flatMap(s=>s.pts.map(p=>p[1]).concat(s.dots.map(d=>d.v))).concat([0]);
+  let y0=Math.min(...all),y1=Math.max(...all);const pad=(y1-y0)*0.08||1;y0-=pad;y1+=pad;
+  const X=F=>ml+(F-x0)/(x1-x0)*(W-ml-mr),Y=v=>mt+(1-(v-y0)/(y1-y0))*(H-mt-mb);
+  const path=s=>s.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join('');
+  let g='';
+  const step=niceStep((y1-y0)/6);
+  for(let v=Math.ceil(y0/step)*step;v<=y1;v+=step){const z=Math.abs(v)<step/2;
+    g+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="${z?1.4:0.6}"/><text x="${ml-8}" y="${Y(v)+4}" text-anchor="end">${z?'$0':fmtMoney(v)}</text>`;}
+  M.strikes.forEach((k,i)=>{if(i%2===0)g+=`<text x="${X(k)}" y="${H-mb+16}" text-anchor="middle">${fmtK(k)}</text>`;});
+  g+=`<text x="${(ml+W-mr)/2}" y="${H-4}" text-anchor="middle">Futures price</text>`;
+  g+=`<line x1="${X(M.F)}" x2="${X(M.F)}" y1="${mt}" y2="${H-mb}" stroke="var(--muted)" stroke-dasharray="3 4"/><text x="${X(M.F)+5}" y="${mt+10}">F now</text>`;
+  // draw base curves last so they stay on top
+  for(const s of [...series.slice(2),...series.slice(0,2)]){
+    g+=`<g class="ser" data-k="${esc(s.key)}"${s.on?'':' style="display:none"'}><path d="${path(s.pts)}" fill="none" stroke="${s.color}" stroke-width="2"${s.dash?` stroke-dasharray="${s.dash}"`:''}/>`;
+    for(const d of s.dots)g+=`<g><circle cx="${X(d.F)}" cy="${Y(d.v)}" r="5" fill="${s.color}" stroke="var(--bg)" stroke-width="2"/><title>${d.lab} — ${esc(d.q)}: F ${fmtPx(d.F)}, B-76 PnL ${fmtMoney(d.v)}</title></g>`;
+    g+='</g>';}
+  const le=series[0].pts[n],ln=series[1].pts[n];
+  g+=`<text x="${W-mr+8}" y="${Y(le[1])+4}" style="fill:var(--text)">At Exp 1 expiry</text><text x="${W-mr+8}" y="${Y(ln[1])+(Math.abs(Y(ln[1])-Y(le[1]))<14?18:4)}" style="fill:var(--text)">Today (B-76)</text>`;
+  const leg=series.map(s=>`<button type="button" class="lg${s.on?' on':''}" data-k="${esc(s.key)}" aria-pressed="${s.on}"><i style="${s.dash?`background:none;border-top:3px dashed ${s.color};height:0`:`background:${s.color}`}"></i>${esc(s.label)}</button>`).join('');
+  return `<svg class="chart" id="payoff" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Payoff diagram">${g}</svg>
+    <div class="legend">${leg}</div>
+    <div class="muted" style="font-size:12px">Click a legend item to show or hide it. Dots are the scenarios you were asked (true B-76 PnL) — hover for detail.</div>`;
+}
+function wireLegend(){
+  document.querySelectorAll('.legend button.lg').forEach(b=>b.onclick=()=>{
+    const on=!b.classList.contains('on');b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);
+    const g=document.querySelector(`#payoff g.ser[data-k="${CSS.escape(b.dataset.k)}"]`);if(g)g.style.display=on?'':'none';});
+}
+function renderResults(){
+  S.qi=S.qs.length;renderTop();
+  const pct=S.maxSoFar?S.score/S.maxSoFar*100:0;
+  const grade=pct>=85?'Risk manager material.':pct>=65?'Solid — a few Greeks to polish.':pct>=45?'Getting there.':'Worth another run.';
+  const pts=[];S.qs.forEach((q,qi)=>{if(q.kind==='rank')q.sc.forEach(s=>pts.push(`<tr><td>Q${qi+1}${s.label}</td><td>${esc(q.title.replace('Scenario PnL — ',''))}</td><td class="n">${fmtPx(s.F1)}</td><td class="n">${fmtMoney(s.approx)}</td><td class="n">${fmtMoney(s.exact)}</td></tr>`));});
+  document.getElementById('app').innerHTML=`<div class="card"><h2>Results</h2>
+    <div style="display:flex;gap:28px;align-items:baseline;flex-wrap:wrap"><div class="bigscore">${S.score} / ${S.maxSoFar}</div><div class="muted">${pct.toFixed(0)}% · ${grade}</div></div>
+    <div class="actions"><button class="primary" id="again">New quiz (same settings)</button><button id="settings">Change settings</button></div></div>
+    <div class="card"><h2>Your position: ${esc(P.name)}</h2>${payoffSVG()}
+    ${pts.length?`<table class="qt"><tr><th>Scenario</th><th>Question</th><th class="n">F</th><th class="n">Greeks estimate</th><th class="n">B-76 PnL</th></tr>${pts.join('')}</table>`:''}</div>
+    <div class="card"><table class="qt results"><tr><th>#</th><th>Question</th><th>Type</th><th class="n">Points</th></tr>
+    ${S.log.map((l,i)=>`<tr><td>${i+1}</td><td>${esc(l.title)}</td><td class="muted">${esc(l.tag)}</td><td class="n">${ptsSpan(l.pts,l.max)}</td></tr>`).join('')}</table></div>`;
+  document.getElementById('again').onclick=startQuiz;
+  document.getElementById('settings').onclick=renderSetup;
+  wireLegend();
+}
+function toggleFS(){
+  if(document.fullscreenElement)document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(()=>{});
+}
+document.addEventListener('fullscreenchange',renderTop);
+// F toggles full screen, except while typing in an answer box
+document.addEventListener('keydown',e=>{if((e.key==='f'||e.key==='F')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))toggleFS();});
+renderSetup();
+</script>
+</body>
+</html>
